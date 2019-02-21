@@ -55,6 +55,7 @@ NS_ASSUME_NONNULL_BEGIN
 @interface YTKBatchRequest : NSObject
 
 ///  All the requests are stored in this array.
+//YTKNetwork 使用YTKBatchRequest类来发送无序的批量请求，它需要用一个含有YTKRequest子类的数组来初始化
 @property (nonatomic, strong, readonly) NSArray<YTKRequest *> *requestArray;
 
 ///  The delegate object of the batch request. Default is nil.

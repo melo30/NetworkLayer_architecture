@@ -416,7 +416,7 @@ static dispatch_queue_t ytkrequest_cache_writing_queue() {
         [YTKNetworkUtils addDoNotBackupAttribute:path];
     }
 }
-
+//创建用户保存所有YTKNetwork缓存的文件夹
 - (NSString *)cacheBasePath {
     NSString *pathOfLibrary = [NSSearchPathForDirectoriesInDomains(NSLibraryDirectory, NSUserDomainMask, YES) objectAtIndex:0];
     NSString *path = [pathOfLibrary stringByAppendingPathComponent:@"LazyRequestCache"];
@@ -432,7 +432,7 @@ static dispatch_queue_t ytkrequest_cache_writing_queue() {
     [self createDirectoryIfNeeded:path];
     return path;
 }
-
+//纯NSData数据缓存的文件名
 - (NSString *)cacheFileName {
     NSString *requestUrl = [self requestUrl];
     NSString *baseUrl = [YTKNetworkConfig sharedConfig].baseUrl;
@@ -442,14 +442,14 @@ static dispatch_queue_t ytkrequest_cache_writing_queue() {
     NSString *cacheFileName = [YTKNetworkUtils md5StringFromString:requestInfo];
     return cacheFileName;
 }
-
+//纯NSData数据的缓存位置
 - (NSString *)cacheFilePath {
     NSString *cacheFileName = [self cacheFileName];
     NSString *path = [self cacheBasePath];
     path = [path stringByAppendingPathComponent:cacheFileName];
     return path;
 }
-
+//元数据的缓存位置
 - (NSString *)cacheMetadataFilePath {
     NSString *cacheMetadataFileName = [NSString stringWithFormat:@"%@.metadata", [self cacheFileName]];
     NSString *path = [self cacheBasePath];

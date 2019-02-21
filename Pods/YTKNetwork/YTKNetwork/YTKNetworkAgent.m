@@ -137,16 +137,21 @@
 
 - (AFHTTPRequestSerializer *)requestSerializerForRequest:(YTKBaseRequest *)request {
     AFHTTPRequestSerializer *requestSerializer = nil;
+    
+    //HTTP or JSON
     if (request.requestSerializerType == YTKRequestSerializerTypeHTTP) {
         requestSerializer = [AFHTTPRequestSerializer serializer];
     } else if (request.requestSerializerType == YTKRequestSerializerTypeJSON) {
         requestSerializer = [AFJSONRequestSerializer serializer];
     }
 
+    //超时时间
     requestSerializer.timeoutInterval = [request requestTimeoutInterval];
+    //是否允许数据服务
     requestSerializer.allowsCellularAccess = [request allowsCellularAccess];
 
     // If api needs server username and password
+    //如果当前请求需要验证
     NSArray<NSString *> *authorizationHeaderFieldArray = [request requestAuthorizationHeaderFieldArray];
     if (authorizationHeaderFieldArray != nil) {
         [requestSerializer setAuthorizationHeaderFieldWithUsername:authorizationHeaderFieldArray.firstObject
@@ -154,6 +159,7 @@
     }
 
     // If api needs to add custom value to HTTPHeaderField
+    //如果当前请求需要自定义 HTTPHeaderField
     NSDictionary<NSString *, NSString *> *headerFieldValueDictionary = [request requestHeaderFieldValueDictionary];
     if (headerFieldValueDictionary != nil) {
         for (NSString *httpHeaderField in headerFieldValueDictionary.allKeys) {
@@ -165,50 +171,74 @@
 }
 
 - (NSURLSessionTask *)sessionTaskForRequest:(YTKBaseRequest *)request error:(NSError * _Nullable __autoreleasing *)error {
+    //1. 获得请求类型（GET，POST等）
     YTKRequestMethod method = [request requestMethod];
+     //2. 获得请求url
     NSString *url = [self buildRequestUrl:request];
+    //3. 获得请求参数
     id param = request.requestArgument;
     AFConstructingBlock constructingBlock = [request constructingBodyBlock];
+    //4. 获得request serializer
     AFHTTPRequestSerializer *requestSerializer = [self requestSerializerForRequest:request];
 
+    //5. 根据不同的请求类型来返回对应的task
     switch (method) {
         case YTKRequestMethodGET:
             if (request.resumableDownloadPath) {
+                //下载任务
                 return [self downloadTaskWithDownloadPath:request.resumableDownloadPath requestSerializer:requestSerializer URLString:url parameters:param progress:request.resumableDownloadProgressBlock error:error];
             } else {
+                //普通get请求
                 return [self dataTaskWithHTTPMethod:@"GET" requestSerializer:requestSerializer URLString:url parameters:param error:error];
             }
         case YTKRequestMethodPOST:
+            //post请求
             return [self dataTaskWithHTTPMethod:@"POST" requestSerializer:requestSerializer URLString:url parameters:param constructingBodyWithBlock:constructingBlock error:error];
         case YTKRequestMethodHEAD:
+            //HEAD请求
             return [self dataTaskWithHTTPMethod:@"HEAD" requestSerializer:requestSerializer URLString:url parameters:param error:error];
         case YTKRequestMethodPUT:
+            //PUT请求
             return [self dataTaskWithHTTPMethod:@"PUT" requestSerializer:requestSerializer URLString:url parameters:param error:error];
         case YTKRequestMethodDELETE:
+            //DELET请求
             return [self dataTaskWithHTTPMethod:@"DELETE" requestSerializer:requestSerializer URLString:url parameters:param error:error];
         case YTKRequestMethodPATCH:
+            //PATCH请求
             return [self dataTaskWithHTTPMethod:@"PATCH" requestSerializer:requestSerializer URLString:url parameters:param error:error];
     }
 }
 
 /** 当前的请求添加进来并发送请求 */
 - (void)addRequest:(YTKBaseRequest *)request {
+    /**
+     第一部分是获取当前请求对应的task并赋给request的requestTask属性（以后提到的request，都为用户自定义的当前请求类的实例）。
+     第二部分是把request放入专门用来保存请求的字典中，key为taskIdentifier。
+     第三部分是启动task。
+     */
+    
+    
     //获取task
     NSParameterAssert(request != nil);
 
     NSError * __autoreleasing requestSerializationError = nil;
 
+    // 获取用户自定义的requestUrl
     NSURLRequest *customUrlRequest= [request buildCustomUrlRequest];
     if (customUrlRequest) {
         __block NSURLSessionDataTask *dataTask = nil;
+        //如果存在用户自定义request，则直接走AFNetworking的dataTaskWithRequest:方法
         dataTask = [_manager dataTaskWithRequest:customUrlRequest completionHandler:^(NSURLResponse * _Nonnull response, id  _Nullable responseObject, NSError * _Nullable error) {
+            //响应的统一处理
             [self handleRequestResult:dataTask responseObject:responseObject error:error];
         }];
         request.requestTask = dataTask;
     } else {
+        //如果用户没有自定义url，则直接走这里
         request.requestTask = [self sessionTaskForRequest:request error:&requestSerializationError];
     }
 
+    //序列化失败，则认定为请求失败
     if (requestSerializationError) {
         [self requestDidFailWithRequest:request error:requestSerializationError];
         return;
@@ -236,7 +266,10 @@
 
     // Retain request
     YTKLog(@"Add request: %@", NSStringFromClass([request class]));
+    
+    ////2. 将request放入保存请求的字典中，taskIdentifier为key，request为值
     [self addRequestToRecord:request];
+    //3. 开始task
     [request.requestTask resume];
 }
 
@@ -295,8 +328,9 @@
     }
     return YES;
 }
-
+//统一处理请求结果，包括成功和失败的情况
 - (void)handleRequestResult:(NSURLSessionTask *)task responseObject:(id)responseObject error:(NSError *)error {
+    //1. 获取task对应的request
     Lock();
     YTKBaseRequest *request = _requestsRecord[@(task.taskIdentifier)];
     Unlock();
@@ -306,6 +340,9 @@
     //
     // Here we choose to completely ignore cancelled tasks. Neither success or failure
     // callback will be called.
+    
+    //如果不存在对应的request，则立即返回
+    
     if (!request) {
         return;
     }
@@ -346,30 +383,40 @@
         succeed = [self validateResult:request error:&validationError];
         requestError = validationError;
     }
-
+ //5. 根据succeed的布尔值来调用相应的处理
     if (succeed) {
+        //请求成功的处理
         [self requestDidSucceedWithRequest:request];
     } else {
+        //请求失败的处理
         [self requestDidFailWithRequest:request error:requestError];
     }
 
+     //6. 回调完成的处理
     dispatch_async(dispatch_get_main_queue(), ^{
+        //6.1 在字典里移除当前request
         [self removeRequestFromRecord:request];
+        //6.2 清除所有block
         [request clearCompletionBlock];
     });
 }
 
 - (void)requestDidSucceedWithRequest:(YTKBaseRequest *)request {
     @autoreleasepool {
+         //写入缓存
         [request requestCompletePreprocessor];
     }
     dispatch_async(dispatch_get_main_queue(), ^{
+        //告诉Accessories请求就要停止了
         [request toggleAccessoriesWillStopCallBack];
+        //在真正的回调之前做的处理,用户自定义
         [request requestCompleteFilter];
 
         if (request.delegate != nil) {
+             //如果有代理，则调用成功的代理
             [request.delegate requestFinished:request];
         }
+        //如果传入了成功回调的代码，则调用
         if (request.successCompletionBlock) {
             request.successCompletionBlock(request);
         }
@@ -430,7 +477,7 @@
     Unlock();
 }
 
-#pragma mark -
+#pragma mark - 私有方法
 
 - (NSURLSessionDataTask *)dataTaskWithHTTPMethod:(NSString *)method
                                requestSerializer:(AFHTTPRequestSerializer *)requestSerializer
@@ -439,7 +486,7 @@
                                            error:(NSError * _Nullable __autoreleasing *)error {
     return [self dataTaskWithHTTPMethod:method requestSerializer:requestSerializer URLString:URLString parameters:parameters constructingBodyWithBlock:nil error:error];
 }
-
+//最终返回NSURLSessionDataTask实例
 - (NSURLSessionDataTask *)dataTaskWithHTTPMethod:(NSString *)method
                                requestSerializer:(AFHTTPRequestSerializer *)requestSerializer
                                        URLString:(NSString *)URLString
@@ -447,16 +494,18 @@
                        constructingBodyWithBlock:(nullable void (^)(id <AFMultipartFormData> formData))block
                                            error:(NSError * _Nullable __autoreleasing *)error {
     NSMutableURLRequest *request = nil;
-
+    //根据有无构造请求体的block的情况来获取request
     if (block) {
         request = [requestSerializer multipartFormRequestWithMethod:method URLString:URLString parameters:parameters constructingBodyWithBlock:block error:error];
     } else {
         request = [requestSerializer requestWithMethod:method URLString:URLString parameters:parameters error:error];
     }
 
+     //获得request以后来获取dataTask
     __block NSURLSessionDataTask *dataTask = nil;
     dataTask = [_manager dataTaskWithRequest:request
                            completionHandler:^(NSURLResponse * __unused response, id responseObject, NSError *_error) {
+                               //响应的统一处理
                                [self handleRequestResult:dataTask responseObject:responseObject error:_error];
                            }];
 

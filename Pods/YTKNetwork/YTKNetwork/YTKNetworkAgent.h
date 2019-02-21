@@ -42,10 +42,10 @@ NS_ASSUME_NONNULL_BEGIN
 ///  Add request to session and start it.
 - (void)addRequest:(YTKBaseRequest *)request;
 
-///  Cancel a request that was previously added.
+///  Cancel a request that was previously added.///  取消某个request
 - (void)cancelRequest:(YTKBaseRequest *)request;
 
-///  Cancel all requests that were previously added.
+///  Cancel all requests that were previously added.///  取消所有添加的request
 - (void)cancelAllRequests;
 
 ///  Return the constructed URL of request.

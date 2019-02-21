@@ -40,9 +40,13 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
+        //下一个请求的index
         _nextRequestIndex = 0;
+        //保存链式请求的数组
         _requestArray = [NSMutableArray array];
+        //保存回调的数组
         _requestCallbackArray = [NSMutableArray array];
+        //空回调，用来填充用户没有定义的回调block
         _emptyCallback = ^(YTKChainRequest *chainRequest, YTKBaseRequest *baseRequest) {
             // do nothing
         };
@@ -51,11 +55,12 @@
 }
 
 - (void)start {
+    //如果第1个请求已经结束，就不再重复start了
     if (_nextRequestIndex > 0) {
         YTKLog(@"Error! Chain request has already started.");
         return;
     }
-
+    //如果请求队列数组里面还有request，则取出并start
     if ([_requestArray count] > 0) {
         [self toggleAccessoriesWillStartCallBack];
         [self startNextRequest];
@@ -71,12 +76,14 @@
     [[YTKChainRequestAgent sharedAgent] removeChainRequest:self];
     [self toggleAccessoriesDidStopCallBack];
 }
-
+//在当前chain添加request和callback
 - (void)addRequest:(YTKBaseRequest *)request callback:(YTKChainCallback)callback {
+    //保存当前请求
     [_requestArray addObject:request];
     if (callback != nil) {
         [_requestCallbackArray addObject:callback];
     } else {
+        //之所以特意弄一个空的callback，是为了避免在用户没有给当前request的callback传值的情况下，造成request数组和callback数组的不对称
         [_requestCallbackArray addObject:_emptyCallback];
     }
 }
@@ -85,6 +92,8 @@
     return _requestArray;
 }
 
+
+//这里startNextRequest方法比较重要：在判断请求队列数组里面还有request的话，就会调用这个方法：
 - (BOOL)startNextRequest {
     if (_nextRequestIndex < [_requestArray count]) {
         YTKBaseRequest *request = _requestArray[_nextRequestIndex];
