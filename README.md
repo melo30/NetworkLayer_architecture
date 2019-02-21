@@ -1,5 +1,6 @@
 # NetworkLayer_architecture
-网络层架构设计，这里是学习YTKNetwork的源码和封装思想，为后面自己封装网络层架构做准备...
+
+YTKNetwork
 
 一直在用YTKNetwork,最近两天把它源码比较详细研究了一遍，收获颇丰。它是猿题库技术团队开源的一个网络请求框架，内部封装了AFNetworking。它把每个请求实例化，管理它的生命周期，也可以管理多个请求和链式请求
 
